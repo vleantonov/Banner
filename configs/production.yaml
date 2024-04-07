@@ -1,0 +1,12 @@
+env: production
+
+server:
+  host: localhost
+  port: 8080
+
+storage:
+  postgres:
+    address: localhost
+    port: 8080
+    username: user
+    password: password
