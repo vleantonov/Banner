@@ -1,0 +1,15 @@
+env: development
+
+server:
+  host: localhost
+  port: 8080
+
+storage:
+  migrations_path: ./migrations
+  migration_table: versions
+  postgres:
+    address: localhost
+    port: 5432
+    username: user
+    password: 1234
+    ssl_mode: disable
