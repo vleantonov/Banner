@@ -19,14 +19,8 @@ func main() {
 
 	m, err := migrate.New(
 		fmt.Sprintf("file://%s", cfg.StorageCfg.MigrationsPath),
-		fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s&x-migrations-table=%s",
-			cfg.StorageCfg.PostgresCfg.Username,
-			cfg.StorageCfg.PostgresCfg.Password,
-			cfg.StorageCfg.PostgresCfg.Host,
-			cfg.StorageCfg.PostgresCfg.Port,
-			cfg.StorageCfg.PostgresCfg.DBName,
-			cfg.StorageCfg.PostgresCfg.SSLMode,
-			cfg.StorageCfg.PostgresCfg.SSLMode,
+		fmt.Sprintf("%s&x-migrations-table=%s",
+			cfg.StorageCfg.PGUrl,
 			cfg.StorageCfg.MigrationsTable,
 		),
 	)

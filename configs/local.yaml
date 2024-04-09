@@ -7,9 +7,4 @@ server:
 storage:
   migrations_path: ./migrations
   migration_table: versions
-  postgres:
-    address: localhost
-    port: 5432
-    username: user
-    password: 1234
-    ssl_mode: disable
+  pg_url: postgres://user:1234@localhost:5432/banner?sslmode=disable

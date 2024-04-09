@@ -1,17 +1,24 @@
 package app
 
 import (
-	api "banner/internal/api/gen"
 	"banner/internal/config"
-	"banner/internal/logger"
-	"banner/internal/repository/postresql"
-	banRoutes "banner/internal/routes/banner"
+	banRoutes "banner/internal/handler/http/v1"
+	api "banner/internal/handler/http/v1/gen"
+	"banner/internal/pkg/logger"
+	repo "banner/internal/repository/postresql"
+	"banner/internal/service"
 	"fmt"
 	"github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 	"log"
-	"time"
+)
+
+const (
+	driverName = "pgx"
 )
 
 type App struct {
@@ -34,20 +41,17 @@ func New() *App {
 
 	httpEngine := gin.New()
 	httpEngine.Use(
-		ginzap.Ginzap(l, time.RFC3339, false),
+		ginzap.Ginzap(l, "", false),
 		ginzap.RecoveryWithZap(l, true),
 	)
 
-	// TODO: take out creating *sqlx.DB
-	postgresRepo, err := postresql.New(
-		cfg.StorageCfg.PostgresCfg.Host,
-		cfg.StorageCfg.PostgresCfg.Port,
-		cfg.StorageCfg.PostgresCfg.Username,
-		cfg.StorageCfg.PostgresCfg.Password,
-		cfg.StorageCfg.PostgresCfg.DBName,
-		cfg.StorageCfg.PostgresCfg.SSLMode,
-		l,
-	)
+	db, err := createDBConnection(cfg.StorageCfg.PGUrl, l)
+	if err != nil {
+		l.Fatal("can't create pgpool for app", zap.Error(err))
+	}
+
+	pgRepo := repo.New(db)
+	bannerService := service.New(l, pgRepo)
 
 	if err != nil {
 		l.Fatal("can't create connection with postgres database", zap.Error(err))
@@ -55,7 +59,7 @@ func New() *App {
 
 	api.RegisterHandlers(
 		httpEngine,
-		banRoutes.New(postgresRepo),
+		banRoutes.New(bannerService),
 	)
 
 	l.Info("app has been successfully built")
@@ -77,4 +81,26 @@ func (a *App) MustRun() {
 	if err != nil {
 		a.l.Fatal("can't run http engine", zap.Error(err))
 	}
+}
+
+func createDBConnection(url string, log *zap.Logger) (*sqlx.DB, error) {
+
+	pgCfg, err := pgx.ParseConfig(url)
+	if err != nil {
+		return nil, fmt.Errorf("can't parse pg config: %w", err)
+	}
+
+	pgLog := logger.NewPgxLogger(log)
+	pgCfg.Tracer = pgLog
+
+	nativeDB := stdlib.OpenDB(*pgCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	nativeDB.SetMaxOpenConns(10)
+	nativeDB.SetMaxIdleConns(5)
+
+	return sqlx.NewDb(nativeDB, driverName), nil
+
 }

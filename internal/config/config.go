@@ -24,18 +24,9 @@ type ServerConfig struct {
 }
 
 type StorageConfig struct {
-	MigrationsPath  string         `yaml:"migrations_path" env:"MIGRATIONS_PATH" env-default:"./migrations"`
-	MigrationsTable string         `yaml:"migrations_table" env:"MIGRATIONS_TABLE" env-default:"versions"`
-	PostgresCfg     PostgresConfig `yaml:"postgres"`
-}
-
-type PostgresConfig struct {
-	Host     string `yaml:"host" env:"POSTGRES_HOST" env-default:"localhost"`
-	Port     string `yaml:"port" env:"POSTGRES_PORT" env-default:"5432"`
-	Username string `yaml:"username" env:"POSTGRES_HOST" env-default:"user"`
-	Password string `yaml:"password" env:"POSTGRES_PASSWORD" env-default:"crackme"`
-	DBName   string `yaml:"db_name" env:"POSTGRES_DB" env-default:"banner"`
-	SSLMode  string `yaml:"ssl_mode" env:"SSL_MODE" env-default:"disable"`
+	MigrationsPath  string `yaml:"migrations_path" env:"MIGRATIONS_PATH" env-default:"./migrations"`
+	MigrationsTable string `yaml:"migrations_table" env:"MIGRATIONS_TABLE" env-default:"versions"`
+	PGUrl           string `yaml:"pg_url" env:"PG_URL" env-required:"true"`
 }
 
 func New(path string) (*Config, error) {

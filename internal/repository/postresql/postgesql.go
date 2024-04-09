@@ -1,22 +1,18 @@
 package postresql
 
 import (
-	"banner/internal/models"
-	repo "banner/internal/repository"
+	"banner/internal/domain"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/pgtype"
 	_ "github.com/jackc/pgx/stdlib"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
-	"go.uber.org/zap"
 	"strings"
-)
-
-const (
-	driverName = "pgx"
 )
 
 type Banner struct {
@@ -26,48 +22,32 @@ type Banner struct {
 	Content   pgtype.JSONB     `db:"content"`
 }
 
-func (b *Banner) mustConvertToStd() models.Banner {
+func (b *Banner) mustConvertToStd() domain.Banner {
 
 	tags := make([]int, 0)
 	for _, tag := range b.TagIDs.Elements {
 		tags = append(tags, int(tag.Int))
 	}
 
-	return models.Banner{
+	return domain.Banner{
 		ID:      int(b.ID.Int),
 		Tags:    tags,
 		Feature: int(b.FeatureID.Int),
-		Content: b.Content.Get(),
+		Content: b.Content.Get().(map[string]interface{}),
 	}
 }
 
 type PostgresRepo struct {
-	db     *sqlx.DB
-	logger *zap.Logger
+	db *sqlx.DB
 }
 
-func New(host, port, username, password, dbName, sslMode string, l *zap.Logger) (*PostgresRepo, error) {
-
-	// TODO: Use pgpool with wrapped logger
-	db, err := sqlx.Connect(driverName, fetchSourcePath(host, port, username, password, dbName, sslMode))
-	if err != nil {
-		return nil, fmt.Errorf("can't connect to postgres database: %w", err)
-	}
-
+func New(db *sqlx.DB) *PostgresRepo {
 	return &PostgresRepo{
-		db:     db,
-		logger: l,
-	}, nil
+		db: db,
+	}
 }
 
-func fetchSourcePath(host, port, username, password, dbName, sslMode string) string {
-	return fmt.Sprintf(
-		"host=%s port=%s dbname=%s user=%s password=%s sslmode=%s",
-		host, port, dbName, username, password, sslMode,
-	)
-}
-
-func (p *PostgresRepo) GetBanner(ctx context.Context, tagId, featureId int) (*models.Banner, error) {
+func (p *PostgresRepo) GetByTagFeatureID(ctx context.Context, tagId, featureId int) (*domain.Banner, error) {
 
 	const getBannerQuery = `
 		SELECT id, content FROM Banners JOIN tag_feature_banners
@@ -76,31 +56,19 @@ func (p *PostgresRepo) GetBanner(ctx context.Context, tagId, featureId int) (*mo
 		AND tag_feature_banners.feature_id = $2;
 	`
 
-	log := p.logger.With(
-		zap.Int("tag_id", tagId),
-		zap.Int("feature_id", featureId),
-	)
-	log.Info(
-		"trying to get banner from database",
-	)
-
 	var banner Banner
 	if err := p.db.GetContext(ctx, &banner, getBannerQuery, tagId, featureId); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, repo.ErrBannerNotExists
+			return nil, domain.ErrBannerNotFound
 		}
 		return nil, fmt.Errorf("can't get banner: %w", err)
 	}
-	log.Info("successfully get banner from database")
 
 	res := banner.mustConvertToStd()
 	return &res, nil
 }
 
-func (p *PostgresRepo) GetByFilterTagFeatureId(ctx context.Context, t models.FilterBanner) (*[]models.Banner, error) {
-
-	log := p.logger
-	log.Info("building get banners with filters query")
+func (p *PostgresRepo) GetByFilter(ctx context.Context, t domain.FilterBanner) (*[]domain.Banner, error) {
 
 	filters := make([]string, 0)
 	args := make([]interface{}, 0)
@@ -108,12 +76,10 @@ func (p *PostgresRepo) GetByFilterTagFeatureId(ctx context.Context, t models.Fil
 	if t.TagID != nil {
 		args = append(args, *t.TagID)
 		filters = append(filters, fmt.Sprintf("AND tag_id=$%d", len(args)))
-		log = log.With(zap.Int("tag_id", *t.TagID))
 	}
 	if t.FeatureID != nil {
 		args = append(args, *t.FeatureID)
 		filters = append(filters, fmt.Sprintf("AND feature_id=$%d", len(args)))
-		log = log.With(zap.Int("feature_id", *t.FeatureID))
 	}
 	queryFilters := strings.Join(filters, " ")
 
@@ -141,38 +107,27 @@ func (p *PostgresRepo) GetByFilterTagFeatureId(ctx context.Context, t models.Fil
 		strings.Join(paginationFilter, " "),
 	)
 
-	log.Info(
-		"trying to get banners from database with filters",
-		zap.String("query", getBannersQuery),
-	)
-
 	banners := []Banner{}
 	if err := p.db.SelectContext(ctx, &banners, getBannersQuery, args...); err != nil {
 		return nil, err
 	}
 
-	log.Info("successfully get banners")
-	res := make([]models.Banner, 0)
+	res := make([]domain.Banner, 0)
 	for _, b := range banners {
 		cnv := b.mustConvertToStd()
 		res = append(res, cnv)
 	}
 
 	if len(banners) == 0 {
-		return nil, repo.ErrBannerNotExists
+		return nil, domain.ErrBannerNotFound
 	}
 
 	return &res, nil
 }
 
-func (p *PostgresRepo) Insert(ctx context.Context, b models.Banner) (int, error) {
-	// TODO: make duplicate tags processing with equal tag values in one field
-	log := p.logger.With(zap.Int("feature_id", b.Feature), zap.Ints("tag_ids", b.Tags))
-	p.logger.Info("trying to create banner")
+func (p *PostgresRepo) Insert(ctx context.Context, b domain.Banner) (int, error) {
 
 	const insertBannerQuery = `INSERT INTO banners (content) VALUES ($1) RETURNING id`
-
-	log.Info("insert banner into banners")
 
 	tx, err := p.db.Beginx()
 	if err != nil {
@@ -208,19 +163,22 @@ func (p *PostgresRepo) Insert(ctx context.Context, b models.Banner) (int, error)
 		VALUES (:tag_id, :feature_id, :banner_id)
 	`
 
-	log.Info("insert tag and feature into tag_feature_banners")
-	tagFeatureBanners := make([]models.TagFeatureBanner, 0)
+	tagFeatureBanners := make([]domain.TagFeatureBanner, 0)
 	for _, tag := range b.Tags {
-		tagFeatureBanners = append(tagFeatureBanners, models.TagFeatureBanner{
+		tagFeatureBanners = append(tagFeatureBanners, domain.TagFeatureBanner{
 			TagID:     tag,
 			FeatureID: b.Feature,
 			BannerID:  insId,
 		})
 	}
 
-	// TODO: Check with pointer
 	_, err = tx.NamedExecContext(ctx, insertBannerTagFeatureQuery, tagFeatureBanners)
+
+	var e *pgconn.PgError
 	if err != nil {
+		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
+			return 0, domain.ErrTagFeatureAlreadyExists
+		}
 		return 0, err
 	}
 
@@ -228,24 +186,13 @@ func (p *PostgresRepo) Insert(ctx context.Context, b models.Banner) (int, error)
 		return 0, err
 	}
 
-	log.Info("banner has been successfully created", zap.Int("id", insId))
 	return insId, nil
 }
 
-// TODO: Get models.Banner
-func (p *PostgresRepo) Update(ctx context.Context, u models.UpdBanner) error {
-
-	log := p.logger.With(zap.Int("id", u.ID))
-	log.Info("trying to update banner")
+func (p *PostgresRepo) Update(ctx context.Context, u domain.UpdBanner) error {
 
 	tx := p.db.MustBegin()
 	defer tx.Rollback()
-
-	if u.Content != nil {
-		if err := p.updateContent(ctx, tx, u.ID, u.Content); err != nil {
-			return err
-		}
-	}
 
 	if u.Tags != nil {
 		if err := p.updateTagIDs(ctx, tx, u.ID, *u.Tags); err != nil {
@@ -254,6 +201,11 @@ func (p *PostgresRepo) Update(ctx context.Context, u models.UpdBanner) error {
 	}
 	if u.Feature != nil {
 		if err := p.updateFeatureID(ctx, tx, u.ID, *u.Feature); err != nil {
+			return err
+		}
+	}
+	if u.Content != nil {
+		if err := p.updateContent(ctx, tx, u.ID, u.Content); err != nil {
 			return err
 		}
 	}
@@ -276,7 +228,11 @@ func (p *PostgresRepo) updateContent(ctx context.Context, tx *sqlx.Tx, bannerID 
 		return err
 	}
 
-	_ = tx.MustExecContext(ctx, updateContentQuery, cJson, bannerID)
+	res := tx.MustExecContext(ctx, updateContentQuery, cJson, bannerID)
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrBannerNotFound
+	}
+
 	return nil
 }
 
@@ -287,7 +243,17 @@ func (p *PostgresRepo) updateFeatureID(ctx context.Context, tx *sqlx.Tx, bannerI
 		WHERE banner_id=$2
 	`
 
-	_ = tx.MustExecContext(ctx, updateFeatureIDQuery, featureID, bannerID)
+	res, err := tx.ExecContext(ctx, updateFeatureIDQuery, featureID, bannerID)
+	var e *pgconn.PgError
+	if err != nil {
+		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
+			return domain.ErrTagFeatureAlreadyExists
+		}
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrBannerNotFound
+	}
 	return nil
 }
 
@@ -305,6 +271,9 @@ func (p *PostgresRepo) updateTagIDs(ctx context.Context, tx *sqlx.Tx, bannerID i
 	var featureID int
 	err := tx.GetContext(ctx, &featureID, deleteCurTagIDsQuery, bannerID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.ErrBannerNotFound
+		}
 		return err
 	}
 
@@ -320,25 +289,33 @@ func (p *PostgresRepo) updateTagIDs(ctx context.Context, tx *sqlx.Tx, bannerID i
 		newRows = append(newRows, row)
 	}
 
-	_, err = tx.NamedExecContext(ctx, insertTagsQuery, newRows)
+	res, err := tx.NamedExecContext(ctx, insertTagsQuery, newRows)
+
+	var e *pgconn.PgError
 	if err != nil {
+		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
+			return domain.ErrTagFeatureAlreadyExists
+		}
 		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrBannerNotFound
 	}
 
 	return nil
 }
 
-func (p *PostgresRepo) DeleteById(ctx context.Context, id int) (int64, error) {
-
-	p.logger.Info("trying to delete banner", zap.Int("id", id))
+func (p *PostgresRepo) DeleteByID(ctx context.Context, id int) error {
 
 	const deleteBannerQuery = `DELETE FROM banners WHERE id=$1`
 
 	res, err := p.db.ExecContext(ctx, deleteBannerQuery, id)
-	if err != nil {
-		return 0, err
+	n, err := res.RowsAffected()
+	if n == 0 {
+		return domain.ErrBannerNotFound
 	}
-
-	// TODO: add error or return only integer
-	return res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	return nil
 }

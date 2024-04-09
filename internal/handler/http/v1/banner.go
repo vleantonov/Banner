@@ -1,12 +1,12 @@
-package banner
+package v1
 
 import (
-	api "banner/internal/api/gen"
-	"banner/internal/models"
-	"banner/internal/repository"
+	"banner/internal/domain"
+	"banner/internal/handler/http/v1/gen"
 	"context"
 	"errors"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"net/http"
 )
 
@@ -14,26 +14,27 @@ type DefaultResponse struct {
 	Message string `json:"message"`
 }
 
-type Repository interface {
-	GetBanner(ctx context.Context, tagId, featureId int) (*models.Banner, error)
-	GetByFilterTagFeatureId(ctx context.Context, f models.FilterBanner) (*[]models.Banner, error)
-	Insert(ctx context.Context, b models.Banner) (int, error)
-	Update(ctx context.Context, b models.UpdBanner) error
-	DeleteById(ctx context.Context, id int) (int64, error)
+type BannerService interface {
+	GetByTagFeatureID(ctx context.Context, tagID, FeatureID int) (*domain.Banner, error)
+	GetByFilter(ctx context.Context, f domain.FilterBanner) (*[]domain.Banner, error)
+	Update(ctx context.Context, banner domain.UpdBanner) error
+	Create(ctx context.Context, banner domain.Banner) (int, error)
+	Delete(ctx context.Context, id int) error
 }
 
 type Router struct {
-	r Repository
+	l *zap.Logger
+	s BannerService
 }
 
-func New(r Repository) *Router {
+func New(s BannerService) *Router {
 	return &Router{
-		r: r,
+		s: s,
 	}
 }
 
 func (r *Router) GetBanner(c *gin.Context, params api.GetBannerParams) {
-	b, err := r.r.GetByFilterTagFeatureId(c, models.FilterBanner{
+	b, err := r.s.GetByFilter(c, domain.FilterBanner{
 		FeatureID: params.FeatureId,
 		TagID:     params.TagId,
 		Limit:     params.Limit,
@@ -41,7 +42,7 @@ func (r *Router) GetBanner(c *gin.Context, params api.GetBannerParams) {
 	})
 
 	if err != nil {
-		if errors.Is(err, repository.ErrBannerNotExists) {
+		if errors.Is(err, domain.ErrBannerNotFound) {
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -63,22 +64,31 @@ func (r *Router) PostBanner(c *gin.Context, params api.PostBannerParams) {
 		return
 	}
 
-	// TODO: Check If tags and feature exists or both unavailable is service
 	if requestBody.TagIds == nil || requestBody.FeatureId == nil {
-		msg := "tag_ids and feature_id are required"
+		msg := domain.ErrTagFeatureRequired.Error()
 		c.JSON(http.StatusBadRequest, api.ErrorResponse{
 			Error: &msg,
 		})
 	}
 
-	idxResp, err := r.r.Insert(c, models.Banner{
-		Content: requestBody.Content,
+	if requestBody.Content == nil {
+		requestBody.Content = &map[string]interface{}{}
+	}
+
+	idxResp, err := r.s.Create(c, domain.Banner{
+		Content: *requestBody.Content,
 		Tags:    *requestBody.TagIds,
 		Feature: *requestBody.FeatureId,
 	})
 
 	if err != nil {
 		msg := err.Error()
+		if errors.Is(err, domain.ErrTagFeatureAlreadyExists) {
+			c.JSON(http.StatusBadRequest, api.ErrorResponse{
+				Error: &msg,
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, api.ErrorResponse{
 			Error: &msg,
 		})
@@ -88,10 +98,10 @@ func (r *Router) PostBanner(c *gin.Context, params api.PostBannerParams) {
 }
 
 func (r *Router) DeleteBannerId(c *gin.Context, id int, params api.DeleteBannerIdParams) {
-	_, err := r.r.DeleteById(c, id)
+	err := r.s.Delete(c, id)
 
 	if err != nil {
-		if errors.Is(err, repository.ErrBannerNotExists) {
+		if errors.Is(err, domain.ErrBannerNotFound) {
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -106,6 +116,8 @@ func (r *Router) DeleteBannerId(c *gin.Context, id int, params api.DeleteBannerI
 
 func (r *Router) PatchBannerId(c *gin.Context, id int, params api.PatchBannerIdParams) {
 	var requestBody api.PatchBannerRequestBody
+	var err error
+
 	if err := c.Bind(&requestBody); err != nil {
 		msg := err.Error()
 		c.JSON(http.StatusInternalServerError, api.ErrorResponse{
@@ -114,23 +126,26 @@ func (r *Router) PatchBannerId(c *gin.Context, id int, params api.PatchBannerIdP
 		return
 	}
 
-	var cnt interface{}
-	if requestBody.Content != nil {
-		cnt = requestBody.Content
-	}
-	err := r.r.Update(c, models.UpdBanner{
+	err = r.s.Update(c, domain.UpdBanner{
 		ID:      id,
 		Tags:    requestBody.TagIds,
 		Feature: requestBody.FeatureId,
-		Content: cnt,
+		Content: requestBody.Content,
 	})
 
 	if err != nil {
-		if errors.Is(err, repository.ErrBannerNotExists) {
+		if errors.Is(err, domain.ErrBannerNotFound) {
 			c.Status(http.StatusNotFound)
 			return
 		}
 		msg := err.Error()
+		if errors.Is(err, domain.ErrTagFeatureAlreadyExists) {
+			c.JSON(http.StatusBadRequest, api.ErrorResponse{
+				Error: &msg,
+			})
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, api.ErrorResponse{
 			Error: &msg,
 		})
@@ -140,13 +155,14 @@ func (r *Router) PatchBannerId(c *gin.Context, id int, params api.PatchBannerIdP
 }
 
 func (r *Router) GetUserBanner(c *gin.Context, params api.GetUserBannerParams) {
-	b, err := r.r.GetBanner(c, params.TagId, params.FeatureId)
+	b, err := r.s.GetByTagFeatureID(c, params.TagId, params.FeatureId)
 	if err != nil {
-		if errors.Is(err, repository.ErrBannerNotExists) {
+		if errors.Is(err, domain.ErrBannerNotFound) {
 			c.Status(http.StatusNotFound)
 			return
 		}
-		msg := err.Error()
+		r.l.Error("can't process user banner query", zap.Error(err))
+		msg := domain.ErrInternalServerError.Error()
 		c.JSON(http.StatusInternalServerError, api.ErrorResponse{
 			Error: &msg,
 		})
