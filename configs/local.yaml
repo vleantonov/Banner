@@ -1,0 +1,10 @@
+env: development
+
+server:
+  host: localhost
+  port: 8080
+
+storage:
+  migrations_path: ./migrations
+  migration_table: versions
+  pg_url: postgres://user:1234@localhost:5432/banner?sslmode=disable
