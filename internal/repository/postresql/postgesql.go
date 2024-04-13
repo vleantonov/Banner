@@ -108,9 +108,11 @@ func (p *PostgresRepo) GetByFilter(ctx context.Context, t domain.FilterBanner) (
 		       array_agg(tfb.tag_id) as tag_ids,
 		       created_at, updated_at
 		FROM banners as b 
-		JOIN tag_feature_banners as tfb 
-		ON b.id = tfb.banner_id 
-		WHERE TRUE %s 
+		JOIN tag_feature_banners as tfb ON tfb.banner_id=b.id
+		WHERE id IN (
+			SELECT banner_id FROM tag_feature_banners
+			WHERE TRUE %s
+		)
 		GROUP BY b.id, tfb.feature_id 
 		ORDER BY b.id %s;
 	`
@@ -154,14 +156,14 @@ func (p *PostgresRepo) Insert(ctx context.Context, b domain.Banner) (int, error)
 		return 0, nil
 	}
 
-	row, err := p.db.Queryx(insertBannerQuery, cJson, b.Active)
+	row, err := tx.Queryx(insertBannerQuery, cJson, b.Active)
 	if err != nil {
 		return 0, err
 	}
 
 	var insId int
 	if !row.Next() {
-		return 0, fmt.Errorf("TODO ERROR WITH NULL ROW")
+		return 0, domain.ErrInternalServerError
 	}
 
 	err = row.Scan(&insId)
@@ -251,7 +253,9 @@ func (p *PostgresRepo) updateBannerInfoByMap(
 		WHERE id=:id
 	`
 
-	delete(m, "id")
+	if len(m) == 0 {
+		return nil
+	}
 	setVal := make([]string, 0)
 	for key := range m {
 		setVal = append(setVal, fmt.Sprintf("%s=:%s", key, key))
@@ -312,7 +316,10 @@ func (p *PostgresRepo) updateTagIDs(ctx context.Context, tx *sqlx.Tx, bannerID i
 		return err
 	}
 
-	const insertTagsQuery = `INSERT INTO tag_feature_banners VALUES (:tag_id,:feature_id,:banner_id)`
+	const insertTagsQuery = `
+		INSERT INTO tag_feature_banners (tag_id, feature_id, banner_id) 
+		VALUES (:tag_id, :feature_id, :banner_id)
+	`
 
 	var newRows []map[string]interface{}
 	for _, tagID := range tagIDs {
@@ -350,6 +357,38 @@ func (p *PostgresRepo) DeleteByID(ctx context.Context, id int) error {
 		return domain.ErrBannerNotFound
 	}
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *PostgresRepo) Delete(ctx context.Context, tagID, featureID *int) error {
+
+	const deleteBannerTemplate = `
+		DELETE FROM banners
+		WHERE id IN (
+		    SELECT banner_id FROM tag_feature_banners
+		    WHERE FALSE
+		    %s
+		);
+	`
+
+	setVals, vals := make([]string, 0), make(map[string]interface{})
+	if tagID != nil {
+		setVals = append(setVals, "OR tag_id=:tag_id")
+		vals["tag_id"] = *tagID
+	}
+	if featureID != nil {
+		setVals = append(setVals, "OR feature_id=:feature_id")
+		vals["feature_id"] = *featureID
+	}
+
+	query := fmt.Sprintf(
+		deleteBannerTemplate,
+		strings.Join(setVals, " "),
+	)
+
+	if _, err := p.db.NamedExecContext(ctx, query, vals); err != nil {
 		return err
 	}
 	return nil

@@ -10,6 +10,12 @@ type BannerContent struct {
 	c *ttlcache.Cache
 }
 
+func New(c *ttlcache.Cache) *BannerContent {
+	return &BannerContent{
+		c: c,
+	}
+}
+
 func (b *BannerContent) GetByTagFeatureID(ctx context.Context, tagID, featureID int) (*map[string]interface{}, bool) {
 	key := getStringKey(tagID, featureID)
 
@@ -25,12 +31,6 @@ func (b *BannerContent) StoreByTagFeatureID(ctx context.Context, tagID, featureI
 	b.c.Set(key, content)
 
 	return
-}
-
-func New(c *ttlcache.Cache) *BannerContent {
-	return &BannerContent{
-		c: c,
-	}
 }
 
 func getStringKey(tagID, featureID int) string {

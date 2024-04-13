@@ -19,7 +19,8 @@ type BannerService interface {
 	GetByFilter(ctx context.Context, f domain.FilterBanner) (*[]domain.Banner, error)
 	Update(ctx context.Context, banner domain.UpdBanner) error
 	Create(ctx context.Context, banner domain.Banner) (int, error)
-	Delete(ctx context.Context, id int) error
+	DeleteById(ctx context.Context, id int) error
+	Delete(ctx context.Context, tagID, featureID *int) error
 }
 
 type Router struct {
@@ -73,7 +74,7 @@ func (r *Router) PostBanner(c *gin.Context, params api.PostBannerParams) {
 		return
 	}
 
-	if requestBody.TagIds == nil || requestBody.FeatureId == nil {
+	if requestBody.TagIds == nil || len(*requestBody.TagIds) == 0 || requestBody.FeatureId == nil {
 		msg := domain.ErrTagFeatureRequired.Error()
 		c.JSON(http.StatusBadRequest, api.ErrorResponse{
 			Error: &msg,
@@ -118,7 +119,7 @@ func (r *Router) DeleteBannerId(c *gin.Context, id int, params api.DeleteBannerI
 		return
 	}
 
-	err := r.s.Delete(c, id)
+	err := r.s.DeleteById(c, id)
 
 	if err != nil {
 		if errors.Is(err, domain.ErrBannerNotFound) {
@@ -204,4 +205,28 @@ func (r *Router) GetUserBanner(c *gin.Context, params api.GetUserBannerParams) {
 		return
 	}
 	c.JSON(http.StatusOK, content)
+}
+
+func (r *Router) DeleteBanner(c *gin.Context, params api.DeleteBannerParams) {
+	if us := c.GetString(domain.UserStatusHeader); us != domain.Admin {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	if params.TagId == nil && params.FeatureId == nil {
+		msg := domain.ErrTagOrFeatureRequired.Error()
+		c.JSON(http.StatusBadRequest, api.ErrorResponse{
+			Error: &msg,
+		})
+		return
+	}
+
+	err := r.s.Delete(c, params.TagId, params.FeatureId)
+	if err != nil {
+		msg := err.Error()
+		c.JSON(http.StatusInternalServerError, api.ErrorResponse{
+			Error: &msg,
+		})
+		return
+	}
+	c.Status(http.StatusAccepted)
 }

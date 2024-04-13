@@ -44,6 +44,18 @@ type PostBannerRequestBody struct {
 	TagIds *[]int `json:"tag_ids,omitempty"`
 }
 
+// DeleteBannerParams defines parameters for DeleteBanner.
+type DeleteBannerParams struct {
+	// TagId Тег баннера для удаления
+	TagId *int `form:"tag_id,omitempty" json:"tag_id,omitempty"`
+
+	// FeatureId Фича баннера для удаления
+	FeatureId *int `form:"feature_id,omitempty" json:"feature_id,omitempty"`
+
+	// Token Токен админа
+	Token *string `json:"token,omitempty"`
+}
+
 // GetBannerParams defines parameters for GetBanner.
 type GetBannerParams struct {
 	FeatureId *int `form:"feature_id,omitempty" json:"feature_id,omitempty"`

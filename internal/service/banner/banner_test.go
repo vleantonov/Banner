@@ -19,6 +19,7 @@ func TestBannerService_GetActiveByTagFeatureID_Valid(t *testing.T) {
 	s := banner.New(
 		rep,
 		c,
+		&mock.Deleter{},
 	)
 
 	ctx := context.Background()
@@ -49,6 +50,7 @@ func TestBannerService_GetActiveByTagFeatureID_Invalid(t *testing.T) {
 	s := banner.New(
 		rep,
 		c,
+		&mock.Deleter{},
 	)
 
 	ctx := context.Background()

@@ -174,3 +174,77 @@ func TestUserBanner_InvalidParams(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
+
+func TestUserBanner_Auth(t *testing.T) {
+	_, st := suite.New(t)
+
+	st.PG.MustExec(initQueryForUserGet)
+
+	url := fmt.Sprintf("http://%s:%d/user_banner?tag_id=1&feature_id=1", st.Cfg.ServerCfg.Host, st.Cfg.ServerCfg.Port)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		st.Fatal(err)
+	}
+
+	tests := []struct {
+		name           string
+		token          string
+		expectedStatus int
+	}{
+		{
+			name:           "Without token",
+			token:          "",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "User token",
+			token:          st.Cfg.ServerCfg.UserToken,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Admin token",
+			token:          st.Cfg.ServerCfg.AdminToken,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Random token",
+			token:          "Random123ssdd",
+			expectedStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, test := range tests {
+		t.Log(test.name)
+
+		req.Header.Set("token", test.token)
+		resp, err := st.HttpClient.Do(req)
+		if err != nil {
+			st.Fatal(err)
+		}
+		resp.Body.Close()
+
+		assert.Equal(t, test.expectedStatus, resp.StatusCode)
+	}
+}
+
+func TestUserBanner_WithoutToken(t *testing.T) {
+	_, st := suite.New(t)
+
+	st.PG.MustExec(initQueryForUserGet)
+
+	url := fmt.Sprintf("http://%s:%d/user_banner?tag_id=1&feature_id=1", st.Cfg.ServerCfg.Host, st.Cfg.ServerCfg.Port)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		st.Fatal(err)
+	}
+
+	resp, err := st.HttpClient.Do(req)
+	if err != nil {
+		st.Fatal(err)
+	}
+	resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}

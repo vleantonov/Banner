@@ -7,9 +7,9 @@ import (
 )
 
 type Config struct {
-	Env        string `env:"ENV" env-default:"development"`
 	ServerCfg  ServerConfig
 	StorageCfg StorageConfig
+	QueueCfg   QueueConfig
 }
 
 type ServerConfig struct {
@@ -24,6 +24,10 @@ type StorageConfig struct {
 	MigrationsTable string        `env:"MIGRATIONS_TABLE" env-default:"versions"`
 	PGUrl           string        `env:"PG_URL" env-required:"true"`
 	TTLCache        time.Duration `env:"TTL_CACHE" env-default:"5m"`
+}
+
+type QueueConfig struct {
+	RMQUrl string `env:"RMQ_URL" env-required:"true"`
 }
 
 func New() (*Config, error) {

@@ -10,7 +10,7 @@ const (
 	envProd = "production"
 )
 
-func New(env string) (*zap.Logger, error) {
+func New() (*zap.Logger, error) {
 
 	var l *zap.Logger
 
