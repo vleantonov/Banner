@@ -12,21 +12,23 @@ import (
 
 func main() {
 
-	cfg, err := config.New(config.FetchConfigPath())
+	cfg, err := config.New()
 	if err != nil {
-		log.Fatal("config is required")
+		log.Fatalf("config is required: %v", err)
 	}
+
+	log.Printf("try to migrate from %s to %s\n", cfg.StorageCfg.MigrationsPath, cfg.StorageCfg.PGUrl)
 
 	m, err := migrate.New(
 		fmt.Sprintf("file://%s", cfg.StorageCfg.MigrationsPath),
-		fmt.Sprintf("%s&x-migrations-table=%s",
+		fmt.Sprintf("%s?x-migrations-table=%s&sslmode=disable",
 			cfg.StorageCfg.PGUrl,
 			cfg.StorageCfg.MigrationsTable,
 		),
 	)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("can't create migrations: %v", err)
 	}
 
 	if err := m.Up(); err != nil {
@@ -36,4 +38,6 @@ func main() {
 		}
 		log.Fatal(err)
 	}
+
+	log.Println("migrations successfully applied")
 }

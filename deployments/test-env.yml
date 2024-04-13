@@ -1,0 +1,39 @@
+version: '3.7'
+services:
+  postgres:
+    hostname: test_db
+    image: postgres:14
+    env_file:
+      - ../.test.env
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d ${POSTGRES_DB} -U ${POSTGRES_USER}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 2
+    volumes:
+      - test-pg-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    networks:
+      - test-banner-net
+
+  banner:
+    image: banner_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../.test.env
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    restart: "on-failure"
+    networks:
+      - test-banner-net
+
+volumes:
+  test-pg-data:
+
+networks:
+  test-banner-net:
+    driver: bridge
+    name: test-banner-net

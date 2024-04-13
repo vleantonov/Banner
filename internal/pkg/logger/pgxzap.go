@@ -25,7 +25,7 @@ func NewPgxLogger(logger *zap.Logger) *PgxLogger {
 }
 
 func (p *PgxLogger) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
-	p.Logger.Info(startDataBaseQuery, zap.String("query", data.SQL), zap.Any("params", data.Args))
+	p.Logger.Info(startDataBaseQuery, zap.String("query", data.SQL))
 	return ctx
 }
 

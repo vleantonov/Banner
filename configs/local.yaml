@@ -3,6 +3,8 @@ env: development
 server:
   host: localhost
   port: 8080
+  user_token: "user"
+  admin_token: "admin"
 
 storage:
   migrations_path: ./migrations

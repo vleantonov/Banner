@@ -20,6 +20,10 @@ type Banner struct {
 	TagIDs    pgtype.Int8Array `db:"tag_ids"`
 	FeatureID pgtype.Int8      `db:"feature_id"`
 	Content   pgtype.JSONB     `db:"content"`
+	Active    pgtype.Bool      `db:"is_active"`
+
+	CreatedAT pgtype.Timestamp `db:"created_at"`
+	UpdatedAT pgtype.Timestamp `db:"updated_at"`
 }
 
 func (b *Banner) mustConvertToStd() domain.Banner {
@@ -30,10 +34,13 @@ func (b *Banner) mustConvertToStd() domain.Banner {
 	}
 
 	return domain.Banner{
-		ID:      int(b.ID.Int),
-		Tags:    tags,
-		Feature: int(b.FeatureID.Int),
-		Content: b.Content.Get().(map[string]interface{}),
+		ID:        int(b.ID.Int),
+		Tags:      tags,
+		Feature:   int(b.FeatureID.Int),
+		Content:   b.Content.Get().(map[string]interface{}),
+		Active:    b.Active.Bool,
+		CreatedAT: b.CreatedAT.Time.String(),
+		UpdatedAT: b.UpdatedAT.Time.String(),
 	}
 }
 
@@ -47,13 +54,16 @@ func New(db *sqlx.DB) *PostgresRepo {
 	}
 }
 
-func (p *PostgresRepo) GetByTagFeatureID(ctx context.Context, tagId, featureId int) (*domain.Banner, error) {
+func (p *PostgresRepo) GetActiveContentByTagFeatureID(
+	ctx context.Context, tagId, featureId int,
+) (*map[string]interface{}, error) {
 
 	const getBannerQuery = `
 		SELECT id, content FROM Banners JOIN tag_feature_banners
 		ON Banners.id = tag_feature_banners.banner_id
 		WHERE tag_feature_banners.tag_id = $1
-		AND tag_feature_banners.feature_id = $2;
+		AND tag_feature_banners.feature_id = $2
+		AND is_active;
 	`
 
 	var banner Banner
@@ -65,7 +75,8 @@ func (p *PostgresRepo) GetByTagFeatureID(ctx context.Context, tagId, featureId i
 	}
 
 	res := banner.mustConvertToStd()
-	return &res, nil
+
+	return &res.Content, nil
 }
 
 func (p *PostgresRepo) GetByFilter(ctx context.Context, t domain.FilterBanner) (*[]domain.Banner, error) {
@@ -92,7 +103,10 @@ func (p *PostgresRepo) GetByFilter(ctx context.Context, t domain.FilterBanner) (
 	}
 
 	const getBannersQueryTemplate = `
-		SELECT id, content, tfb.feature_id, array_agg(tfb.tag_id) as tag_ids
+		SELECT id, content, is_active,
+		       tfb.feature_id, 
+		       array_agg(tfb.tag_id) as tag_ids,
+		       created_at, updated_at
 		FROM banners as b 
 		JOIN tag_feature_banners as tfb 
 		ON b.id = tfb.banner_id 
@@ -107,7 +121,7 @@ func (p *PostgresRepo) GetByFilter(ctx context.Context, t domain.FilterBanner) (
 		strings.Join(paginationFilter, " "),
 	)
 
-	banners := []Banner{}
+	banners := make([]Banner, 0)
 	if err := p.db.SelectContext(ctx, &banners, getBannersQuery, args...); err != nil {
 		return nil, err
 	}
@@ -127,7 +141,7 @@ func (p *PostgresRepo) GetByFilter(ctx context.Context, t domain.FilterBanner) (
 
 func (p *PostgresRepo) Insert(ctx context.Context, b domain.Banner) (int, error) {
 
-	const insertBannerQuery = `INSERT INTO banners (content) VALUES ($1) RETURNING id`
+	const insertBannerQuery = `INSERT INTO banners (content, is_active) VALUES ($1, $2) RETURNING id`
 
 	tx, err := p.db.Beginx()
 	if err != nil {
@@ -140,7 +154,7 @@ func (p *PostgresRepo) Insert(ctx context.Context, b domain.Banner) (int, error)
 		return 0, nil
 	}
 
-	row, err := p.db.Queryx(insertBannerQuery, cJson)
+	row, err := p.db.Queryx(insertBannerQuery, cJson, b.Active)
 	if err != nil {
 		return 0, err
 	}
@@ -204,10 +218,20 @@ func (p *PostgresRepo) Update(ctx context.Context, u domain.UpdBanner) error {
 			return err
 		}
 	}
+
+	updateBannerInfoMap := make(map[string]interface{})
 	if u.Content != nil {
-		if err := p.updateContent(ctx, tx, u.ID, u.Content); err != nil {
+		cJson, err := json.Marshal(u.Content)
+		if err != nil {
 			return err
 		}
+		updateBannerInfoMap["content"] = cJson
+	}
+	if u.Active != nil {
+		updateBannerInfoMap["is_active"] = *u.Active
+	}
+	if err := p.updateBannerInfoByMap(ctx, tx, u.ID, updateBannerInfoMap); err != nil {
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -216,19 +240,30 @@ func (p *PostgresRepo) Update(ctx context.Context, u domain.UpdBanner) error {
 	return nil
 }
 
-func (p *PostgresRepo) updateContent(ctx context.Context, tx *sqlx.Tx, bannerID int, content interface{}) error {
-	const updateContentQuery = `
+func (p *PostgresRepo) updateBannerInfoByMap(
+	ctx context.Context, tx *sqlx.Tx,
+	id int,
+	m map[string]interface{},
+) error {
+	const updateBannerQueryTmpl = `
 		UPDATE banners 
-		SET content=$1
-		WHERE id=$2
+		SET %s
+		WHERE id=:id
 	`
 
-	cJson, err := json.Marshal(content)
+	delete(m, "id")
+	setVal := make([]string, 0)
+	for key := range m {
+		setVal = append(setVal, fmt.Sprintf("%s=:%s", key, key))
+	}
+	m["id"] = id
+
+	query := fmt.Sprintf(updateBannerQueryTmpl, strings.Join(setVal, ", "))
+
+	res, err := tx.NamedExecContext(ctx, query, m)
 	if err != nil {
 		return err
 	}
-
-	res := tx.MustExecContext(ctx, updateContentQuery, cJson, bannerID)
 	if n, _ := res.RowsAffected(); n == 0 {
 		return domain.ErrBannerNotFound
 	}

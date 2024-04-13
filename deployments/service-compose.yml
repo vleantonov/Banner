@@ -1,19 +1,10 @@
 version: '3.7'
 services:
-  redis:
-    image: redis:alpine
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
-    command: redis-server --save 60 1
-    networks:
-      - db-net
-    restart: "always"
   postgres:
     image: postgres:14
+    hostname: ${POSTGRES_HOST}
     env_file:
-      - ./.env
+      - ../.env
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -d ${POSTGRES_DB} -U ${POSTGRES_USER}" ]
       interval: 5s
@@ -23,12 +14,27 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: "on-failure"
+    networks:
+      - banner-net
+
+  banner:
+    image: banner_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    restart: "on-failure"
+    networks:
+      - banner-net
 
 volumes:
-  redis_data:
   postgres_data:
 
 networks:
-  db-net:
+  banner-net:
     driver: bridge
-    name: db-net
+    name: banner-net
