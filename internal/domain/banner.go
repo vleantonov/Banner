@@ -1,10 +1,14 @@
 package domain
 
 type Banner struct {
-	ID      int                    `json:"id" db:"id"`
+	ID      int                    `json:"id,omitempty" db:"id"`
 	Content map[string]interface{} `json:"content" db:"content"`
 	Tags    []int                  `json:"tag_ids" db:"tag_ids"`
 	Feature int                    `json:"feature_id" db:"feature_id"`
+	Active  bool                   `json:"is_active" db:"is_active"`
+
+	CreatedAT string `json:"created_at" db:"created_at"`
+	UpdatedAT string `json:"updated_at" db:"updated_at"`
 }
 
 type UpdBanner struct {
@@ -12,6 +16,7 @@ type UpdBanner struct {
 	Content *map[string]interface{} `json:"content" db:"content"`
 	Tags    *[]int                  `json:"tag_ids" db:"tag_ids"`
 	Feature *int                    `json:"feature_id" db:"feature_id"`
+	Active  *bool                   `json:"is_active" db:"is_active"`
 }
 
 type TagFeatureBanner struct {

@@ -4,10 +4,13 @@ import (
 	"banner/internal/config"
 	banRoutes "banner/internal/handler/http/v1"
 	api "banner/internal/handler/http/v1/gen"
+	"banner/internal/handler/http/v1/middleware"
 	"banner/internal/pkg/logger"
 	repo "banner/internal/repository/postresql"
-	"banner/internal/service"
+	"banner/internal/repository/ttl"
+	"banner/internal/service/banner"
 	"fmt"
+	"github.com/ReneKroon/ttlcache"
 	"github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -29,7 +32,7 @@ type App struct {
 
 func New() *App {
 
-	cfg, err := config.New(config.FetchConfigPath())
+	cfg, err := config.New()
 	if err != nil {
 		log.Fatalf("can't create config: %v", err)
 	}
@@ -41,6 +44,7 @@ func New() *App {
 
 	httpEngine := gin.New()
 	httpEngine.Use(
+		middleware.CheckToken(cfg.ServerCfg.UserToken, cfg.ServerCfg.AdminToken),
 		ginzap.Ginzap(l, "", false),
 		ginzap.RecoveryWithZap(l, true),
 	)
@@ -51,7 +55,23 @@ func New() *App {
 	}
 
 	pgRepo := repo.New(db)
-	bannerService := service.New(l, pgRepo)
+
+	cache := ttlcache.NewCache()
+	cache.SetTTL(cfg.StorageCfg.TTLCache)
+	cache.SetNewItemCallback(func(key string, value interface{}) {
+		l.Info("new cache element", zap.String("key", key))
+	})
+	cache.SetExpirationCallback(func(key string, value interface{}) {
+		l.Info("cache element has been expired", zap.String("key", key))
+	})
+	bannerCache := ttl.New(
+		cache,
+	)
+
+	bannerService := banner.New(
+		pgRepo,
+		bannerCache,
+	)
 
 	if err != nil {
 		l.Fatal("can't create connection with postgres database", zap.Error(err))
