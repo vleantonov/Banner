@@ -5,17 +5,15 @@ import (
 	banRoutes "banner/internal/handler/http/v1"
 	api "banner/internal/handler/http/v1/gen"
 	"banner/internal/handler/http/v1/middleware"
+	"banner/internal/pkg/cache"
+	"banner/internal/pkg/database"
 	"banner/internal/pkg/logger"
+	"banner/internal/pkg/rabbitmq"
 	repo "banner/internal/repository/postresql"
-	"banner/internal/repository/ttl"
 	"banner/internal/service/banner"
 	"fmt"
-	"github.com/ReneKroon/ttlcache"
 	"github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 	"log"
 )
@@ -37,7 +35,7 @@ func New() *App {
 		log.Fatalf("can't create config: %v", err)
 	}
 
-	l, err := logger.New(cfg.Env)
+	l, err := logger.New()
 	if err != nil {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
@@ -49,28 +47,24 @@ func New() *App {
 		ginzap.RecoveryWithZap(l, true),
 	)
 
-	db, err := createDBConnection(cfg.StorageCfg.PGUrl, l)
+	db, err := database.CreateDBConnection(cfg.StorageCfg.PGUrl, l)
 	if err != nil {
 		l.Fatal("can't create pgpool for app", zap.Error(err))
 	}
 
 	pgRepo := repo.New(db)
 
-	cache := ttlcache.NewCache()
-	cache.SetTTL(cfg.StorageCfg.TTLCache)
-	cache.SetNewItemCallback(func(key string, value interface{}) {
-		l.Info("new cache element", zap.String("key", key))
-	})
-	cache.SetExpirationCallback(func(key string, value interface{}) {
-		l.Info("cache element has been expired", zap.String("key", key))
-	})
-	bannerCache := ttl.New(
-		cache,
-	)
+	rmqProducer, err := rabbitmq.SetupRMQ(cfg.QueueCfg.RMQUrl)
+	if err != nil {
+		l.Fatal("can't setup RMQ", zap.Error(err))
+	}
+
+	bannerCache := cache.SetupCache(cfg.StorageCfg.TTLCache, l)
 
 	bannerService := banner.New(
 		pgRepo,
 		bannerCache,
+		rmqProducer,
 	)
 
 	if err != nil {
@@ -91,8 +85,8 @@ func New() *App {
 }
 
 func (a *App) MustRun() {
-
 	defer a.l.Sync()
+
 	a.l.Info("server started")
 
 	err := a.e.Run(
@@ -101,26 +95,4 @@ func (a *App) MustRun() {
 	if err != nil {
 		a.l.Fatal("can't run http engine", zap.Error(err))
 	}
-}
-
-func createDBConnection(url string, log *zap.Logger) (*sqlx.DB, error) {
-
-	pgCfg, err := pgx.ParseConfig(url)
-	if err != nil {
-		return nil, fmt.Errorf("can't parse pg config: %w", err)
-	}
-
-	pgLog := logger.NewPgxLogger(log)
-	pgCfg.Tracer = pgLog
-
-	nativeDB := stdlib.OpenDB(*pgCfg)
-	if err != nil {
-		return nil, err
-	}
-
-	nativeDB.SetMaxOpenConns(10)
-	nativeDB.SetMaxIdleConns(5)
-
-	return sqlx.NewDb(nativeDB, driverName), nil
-
 }

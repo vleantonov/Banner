@@ -6,7 +6,6 @@ toolchain go1.21.4
 
 require (
 	github.com/ReneKroon/ttlcache v1.7.0
-	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/getkin/kin-openapi v0.123.0
 	github.com/gin-contrib/zap v1.1.1
 	github.com/gin-gonic/gin v1.9.1
@@ -17,6 +16,7 @@ require (
 	github.com/jackc/pgx/v5 v5.3.1
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/oapi-codegen/runtime v1.1.1
+	github.com/streadway/amqp v1.1.0
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/zap v1.27.0
 )

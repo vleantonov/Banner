@@ -1,7 +1,7 @@
 version: '3.7'
 services:
   postgres:
-    hostname: test_db
+    hostname: ${POSTGRES_HOST}
     image: postgres:14
     env_file:
       - ../.test.env
@@ -17,11 +17,27 @@ services:
     networks:
       - test-banner-net
 
+  rabbitmq:
+    image: rabbitmq:3.10.7-management
+    env_file:
+      - ../.test.env
+    hostname: ${RABBITMQ_HOST}
+    restart: "on-failure"
+    ports:
+      - "${RABBITMQ_PORT_MANAGEMENT}:15672"
+      - "${RABBITMQ_PORT}:5672"
+    networks:
+      - test-banner-net
+    volumes:
+      - test-rabbitmq-data:/var/lib/rabbitmq
+
   banner:
     image: banner_app
     depends_on:
       postgres:
         condition: service_healthy
+      rabbitmq:
+        condition: service_started
     env_file:
       - ../.test.env
     ports:
@@ -30,8 +46,25 @@ services:
     networks:
       - test-banner-net
 
+  banner-worker:
+    image: banner_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      banner:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    env_file:
+      - ../.test.env
+    networks:
+      - test-banner-net
+    restart: "on-failure"
+    command: ["./worker"]
+
 volumes:
   test-pg-data:
+  test-rabbitmq-data:
 
 networks:
   test-banner-net:

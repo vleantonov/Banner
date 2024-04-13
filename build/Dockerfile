@@ -17,6 +17,7 @@ COPY . .
 
 RUN go build -ldflags="-s -w" -o /app/banner ./cmd/banner/main.go
 RUN go build -ldflags="-s -w" -o /app/migrator ./cmd/migrator/main.go
+RUN go build -ldflags="-s -w" -o /app/worker ./cmd/worker/main.go
 
 FROM alpine
 

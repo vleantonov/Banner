@@ -180,6 +180,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Удаление баннеров по тегу или фиче
+      parameters:
+        - in: header
+          name: token
+          description: Токен админа
+          schema:
+            type: string
+            example: "admin_token"
+        - in: query
+          name: tag_id
+          description: Тег баннера для удаления
+          schema:
+            type: integer
+            example: 1
+        - in: query
+          name: feature_id
+          description: Фича баннера для удаления
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '202':
+          description: Сервер получил запрос на удаление
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostBannerResponse"
+        '400':
+          description: Некорректные данные
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '401':
+          description: Пользователь не авторизован
+        '403':
+          description: Пользователь не имеет доступа
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /banner/{id}:
     patch:

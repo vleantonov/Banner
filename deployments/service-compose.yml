@@ -18,6 +18,20 @@ services:
     networks:
       - banner-net
 
+  rabbitmq:
+    image: rabbitmq:3.10.7-management
+    env_file:
+      - ../.env
+    hostname: ${RABBITMQ_HOST}
+    restart: "on-failure"
+    ports:
+      - "${RABBITMQ_PORT_MANAGEMENT}:15672"
+      - "${RABBITMQ_PORT}:5672"
+    networks:
+      - banner-net
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
   banner:
     image: banner_app
     depends_on:
@@ -31,8 +45,25 @@ services:
     networks:
       - banner-net
 
+  banner-worker:
+    image: banner_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      banner:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    env_file:
+      - ../.env
+    networks:
+      - banner-net
+    restart: "on-failure"
+    command: [ "./worker" ]
+
 volumes:
   postgres_data:
+  rabbitmq-data:
 
 networks:
   banner-net:

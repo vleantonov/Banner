@@ -13,6 +13,9 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Удаление баннеров по тегу или фиче
+	// (DELETE /banner)
+	DeleteBanner(c *gin.Context, params DeleteBannerParams)
 	// Получение всех баннеров c фильтрацией по фиче и/или тегу
 	// (GET /banner)
 	GetBanner(c *gin.Context, params GetBannerParams)
@@ -38,6 +41,61 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// DeleteBanner operation middleware
+func (siw *ServerInterfaceWrapper) DeleteBanner(c *gin.Context) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteBannerParams
+
+	// ------------- Optional query parameter "tag_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "tag_id", c.Request.URL.Query(), &params.TagId)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter tag_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "feature_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "feature_id", c.Request.URL.Query(), &params.FeatureId)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter feature_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("token")]; found {
+		var Token string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for token, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "token", valueList[0], &Token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter token: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Token = &Token
+
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DeleteBanner(c, params)
+}
 
 // GetBanner operation middleware
 func (siw *ServerInterfaceWrapper) GetBanner(c *gin.Context) {
@@ -349,6 +407,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
+	router.DELETE(options.BaseURL+"/banner", wrapper.DeleteBanner)
 	router.GET(options.BaseURL+"/banner", wrapper.GetBanner)
 	router.POST(options.BaseURL+"/banner", wrapper.PostBanner)
 	router.DELETE(options.BaseURL+"/banner/:id", wrapper.DeleteBannerId)
