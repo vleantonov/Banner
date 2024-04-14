@@ -44,7 +44,7 @@ func TestDeleteBanner(t *testing.T) {
 	if err != nil {
 		st.Fatal(err)
 	}
-	req.Header.Set("token", st.Cfg.ServerCfg.AdminToken)
+	req.Header.Set("token", st.AdminToken)
 
 	tests := []struct {
 		name        string

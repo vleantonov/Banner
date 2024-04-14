@@ -48,7 +48,7 @@ func TestPostBanner_Success(t *testing.T) {
 		st.Fatal(err)
 	}
 
-	req.Header.Set("token", st.Cfg.ServerCfg.AdminToken)
+	req.Header.Set("token", st.AdminToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := st.HttpClient.Do(req)

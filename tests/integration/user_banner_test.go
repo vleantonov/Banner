@@ -46,7 +46,7 @@ func TestGetUserBanner_Success(t *testing.T) {
 	if err != nil {
 		st.Fatal(err)
 	}
-	req.Header.Set("token", st.Cfg.ServerCfg.UserToken)
+	req.Header.Set("token", st.UserToken)
 
 	testMap := []struct {
 		name             string
@@ -140,7 +140,7 @@ func TestUserBanner_InvalidParams(t *testing.T) {
 	if err != nil {
 		st.Fatal(err)
 	}
-	req.Header.Set("token", st.Cfg.ServerCfg.UserToken)
+	req.Header.Set("token", st.UserToken)
 
 	resp, err := st.HttpClient.Do(req)
 	if err != nil {
@@ -199,12 +199,12 @@ func TestUserBanner_Auth(t *testing.T) {
 		},
 		{
 			name:           "User token",
-			token:          st.Cfg.ServerCfg.UserToken,
+			token:          st.UserToken,
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "Admin token",
-			token:          st.Cfg.ServerCfg.AdminToken,
+			token:          st.AdminToken,
 			expectedStatus: http.StatusOK,
 		},
 		{

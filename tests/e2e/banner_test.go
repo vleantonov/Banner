@@ -39,7 +39,7 @@ func createBanner(st *suite.Suite) {
 		st.Fatal(err)
 	}
 
-	req.Header.Set("token", st.Cfg.ServerCfg.AdminToken)
+	req.Header.Set("token", st.AdminToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := st.HttpClient.Do(req)
@@ -55,7 +55,7 @@ func getUserBanner(st *suite.Suite, t *testing.T, useLast bool, expStatus int, e
 	if err != nil {
 		st.Fatal(err)
 	}
-	req.Header.Set("token", st.Cfg.ServerCfg.UserToken)
+	req.Header.Set("token", st.UserToken)
 	q := httpurl.Values{}
 	q.Add("tag_id", strconv.Itoa(1))
 	q.Add("feature_id", strconv.Itoa(1))
@@ -91,7 +91,7 @@ func getAdminBanner(st *suite.Suite, t *testing.T, expBody *domain.Banner) int {
 	if err != nil {
 		st.Fatal(err)
 	}
-	req.Header.Set("token", st.Cfg.ServerCfg.AdminToken)
+	req.Header.Set("token", st.AdminToken)
 
 	resp, err := st.HttpClient.Do(req)
 	if err != nil {
@@ -137,7 +137,7 @@ func setIsActiveFalse(st *suite.Suite, t *testing.T, id int) {
 	if err != nil {
 		st.Fatal(err)
 	}
-	req.Header.Set("token", st.Cfg.ServerCfg.AdminToken)
+	req.Header.Set("token", st.AdminToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := st.HttpClient.Do(req)

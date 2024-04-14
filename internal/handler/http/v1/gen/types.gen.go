@@ -8,6 +8,11 @@ type ErrorResponse struct {
 	Error *string `json:"error,omitempty"`
 }
 
+// PostAuthLoginResponse Токен пользователя
+type PostAuthLoginResponse struct {
+	Token string `json:"token"`
+}
+
 // PostBannerResponse defines model for PostBannerResponse.
 type PostBannerResponse struct {
 	// BannerId Идентификатор созданного баннера
@@ -42,6 +47,33 @@ type PostBannerRequestBody struct {
 
 	// TagIds Идентификаторы тэгов
 	TagIds *[]int `json:"tag_ids,omitempty"`
+}
+
+// UserRequestBody defines model for UserRequestBody.
+type UserRequestBody struct {
+	// Login Логин пользователя
+	Login string `json:"login"`
+
+	// Password Пароль пользователя
+	Password string `json:"password"`
+}
+
+// PostAuthLoginJSONBody defines parameters for PostAuthLogin.
+type PostAuthLoginJSONBody struct {
+	// Login Логин пользователя
+	Login string `json:"login"`
+
+	// Password Пароль пользователя
+	Password string `json:"password"`
+}
+
+// PostAuthRegisterJSONBody defines parameters for PostAuthRegister.
+type PostAuthRegisterJSONBody struct {
+	// Login Логин пользователя
+	Login string `json:"login"`
+
+	// Password Пароль пользователя
+	Password string `json:"password"`
 }
 
 // DeleteBannerParams defines parameters for DeleteBanner.
@@ -124,6 +156,12 @@ type GetUserBannerParams struct {
 	// Token Токен пользователя
 	Token *string `json:"token,omitempty"`
 }
+
+// PostAuthLoginJSONRequestBody defines body for PostAuthLogin for application/json ContentType.
+type PostAuthLoginJSONRequestBody PostAuthLoginJSONBody
+
+// PostAuthRegisterJSONRequestBody defines body for PostAuthRegister for application/json ContentType.
+type PostAuthRegisterJSONRequestBody PostAuthRegisterJSONBody
 
 // PostBannerJSONRequestBody defines body for PostBanner for application/json ContentType.
 type PostBannerJSONRequestBody PostBannerJSONBody

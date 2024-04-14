@@ -163,7 +163,7 @@ func (p *PostgresRepo) Insert(ctx context.Context, b domain.Banner) (int, error)
 
 	var insId int
 	if !row.Next() {
-		return 0, domain.ErrInternalServerError
+		return 0, err
 	}
 
 	err = row.Scan(&insId)
@@ -392,4 +392,37 @@ func (p *PostgresRepo) Delete(ctx context.Context, tagID, featureID *int) error 
 		return err
 	}
 	return nil
+}
+
+func (p *PostgresRepo) SaveUser(ctx context.Context, login string, passHash []byte) error {
+
+	const saveUserQuery = "INSERT INTO users (login, pass_hash) VALUES ($1, $2)"
+
+	rows, err := p.db.Queryx(saveUserQuery, login, passHash)
+	if err != nil {
+		var e *pgconn.PgError
+		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
+			return domain.ErrUserExists
+		}
+		return err
+	}
+	rows.Next()
+
+	return nil
+}
+
+func (p *PostgresRepo) User(ctx context.Context, email string) (*domain.User, error) {
+
+	const getUserQuery = "SELECT login, pass_hash, is_admin FROM users WHERE login=$1"
+	row, err := p.db.Queryx(getUserQuery, email)
+	if err != nil {
+		return nil, err
+	}
+	if !row.Next() {
+		return nil, domain.ErrUserNotFound
+	}
+	var user domain.User
+	err = row.StructScan(&user)
+
+	return &user, nil
 }

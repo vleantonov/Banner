@@ -5,11 +5,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-const (
-	envDev  = "development"
-	envProd = "production"
-)
-
 func New() (*zap.Logger, error) {
 
 	var l *zap.Logger

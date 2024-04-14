@@ -13,10 +13,10 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Host       string `env:"APP_HOST" env-default:"localhost"`
-	Port       int    `env:"APP_PORT" env-default:"8080"`
-	UserToken  string `env:"USER_TOKEN" env-required:"true"`
-	AdminToken string `env:"ADMIN_TOKEN" env-required:"true"`
+	Host      string        `env:"APP_HOST" env-default:"localhost"`
+	Port      int           `env:"APP_PORT" env-default:"8080"`
+	AppSecret string        `env:"APP_SECRET" env-required:"true"`
+	TTLToken  time.Duration `env:"TTL_TOKEN" env-default:"1h"`
 }
 
 type StorageConfig struct {
