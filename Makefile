@@ -30,6 +30,15 @@ env:
 run: check_env_file build-image
 	docker compose -f ./deployments/service-compose.yml -p banner up -d --remove-orphans
 
+token: check_env_file
+	go run cmd/jwtgen/main.go
+test-token:
+	$(eval include .test.env)
+	$(eval export)
+	$(eval export PG_URL=postgres://test_user:crakme@localhost:4444/banner)
+
+	go run cmd/jwtgen/main.go
+
 stop:
 	-docker compose -f ./deployments/service-compose.yml -p banner down
 
@@ -44,6 +53,7 @@ test-env-file:
 	echo RABBITMQ_PORT=$(TEST_RMQ_PORT) >> ./.test.env
 	echo RABBITMQ_PORT_MANAGEMENT=$(TEST_RMQ_MANAGEMENT_PORT) >> ./.test.env
 
+	echo APP_SECRET=secret >> ./.test.env
 	echo APP_PORT=$(TEST_APP_PORT) >> ./.test.env
 	echo ADMIN_TOKEN=admin >> ./.test.env
 	echo USER_TOKEN=user >> ./.test.env

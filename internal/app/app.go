@@ -4,22 +4,19 @@ import (
 	"banner/internal/config"
 	banRoutes "banner/internal/handler/http/v1"
 	api "banner/internal/handler/http/v1/gen"
-	"banner/internal/handler/http/v1/middleware"
 	"banner/internal/pkg/cache"
 	"banner/internal/pkg/database"
 	"banner/internal/pkg/logger"
 	"banner/internal/pkg/rabbitmq"
 	repo "banner/internal/repository/postresql"
+	"banner/internal/service/auth"
 	"banner/internal/service/banner"
 	"fmt"
 	"github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"log"
-)
-
-const (
-	driverName = "pgx"
+	"time"
 )
 
 type App struct {
@@ -42,7 +39,6 @@ func New() *App {
 
 	httpEngine := gin.New()
 	httpEngine.Use(
-		middleware.CheckToken(cfg.ServerCfg.UserToken, cfg.ServerCfg.AdminToken),
 		ginzap.Ginzap(l, "", false),
 		ginzap.RecoveryWithZap(l, true),
 	)
@@ -67,13 +63,18 @@ func New() *App {
 		rmqProducer,
 	)
 
+	authService := auth.New(l, pgRepo, time.Hour, cfg.ServerCfg.AppSecret)
+
 	if err != nil {
 		l.Fatal("can't create connection with postgres database", zap.Error(err))
 	}
 
 	api.RegisterHandlers(
 		httpEngine,
-		banRoutes.New(bannerService),
+		banRoutes.New(
+			bannerService,
+			authService,
+		),
 	)
 
 	l.Info("app has been successfully built")

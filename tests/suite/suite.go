@@ -2,6 +2,8 @@ package suite
 
 import (
 	"banner/internal/config"
+	"banner/internal/domain"
+	"banner/internal/pkg/jwt"
 	"context"
 	_ "github.com/jackc/pgx/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -17,6 +19,8 @@ const cleanDBPath = "../suite/clean.sql"
 type Suite struct {
 	*testing.T
 	Cfg        *config.Config
+	UserToken  string
+	AdminToken string
 	HttpClient *http.Client
 	PG         *sqlx.DB
 }
@@ -34,6 +38,32 @@ func New(t *testing.T) (context.Context, *Suite) {
 	db, err := sqlx.Connect("pgx", cfg.StorageCfg.PGUrl)
 	if err != nil {
 		t.Fatalf("can't connect to db: %v", err)
+	}
+
+	adminToken, err := jwt.NewToken(
+		&domain.User{
+			Login:    "admin",
+			PassHash: []byte("admin"),
+			IsAdmin:  true,
+		},
+		time.Hour,
+		cfg.ServerCfg.AppSecret,
+	)
+	if err != nil {
+		t.Fatalf("can't create admin token: %v", err)
+	}
+
+	userToken, err := jwt.NewToken(
+		&domain.User{
+			Login:    "user",
+			PassHash: []byte("user"),
+			IsAdmin:  true,
+		},
+		time.Hour,
+		cfg.ServerCfg.AppSecret,
+	)
+	if err != nil {
+		t.Fatalf("can't create user token: %v", err)
 	}
 
 	cleanQueries, err := getQueriesFromFile(cleanDBPath)
@@ -55,17 +85,15 @@ func New(t *testing.T) (context.Context, *Suite) {
 		Cfg:        cfg,
 		HttpClient: &http.Client{},
 		PG:         db,
+		AdminToken: adminToken,
+		UserToken:  userToken,
 	}
 }
 
 func getQueriesFromFile(filepath string) ([]string, error) {
-
 	file, err := os.ReadFile(filepath)
-
 	if err != nil {
 		return nil, err
 	}
-
 	return strings.Split(string(file), ";"), nil
-
 }

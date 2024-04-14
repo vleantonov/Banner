@@ -3,6 +3,57 @@ info:
   title: Сервис баннеров
   version: 1.0.0
 paths:
+  /auth/register:
+    post:
+      summary: Регистрация пользователя
+      requestBody:
+        $ref: "#/components/requestBodies/UserRequestBody"
+      responses:
+        '201':
+          description: Пользователь зарегистрирован
+
+        '400':
+          description: Неверные данные
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '409':
+          description: Пользователь уже существует
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      summary: Авторизация пользователя и получение токена
+      requestBody:
+        $ref: "#/components/requestBodies/UserRequestBody"
+      responses:
+        '200':
+          description: Пользователь авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostAuthLoginResponse"
+
+        '400':
+          description: Неверные данные
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+
   /user_banner:
     get:
       summary: Получение баннера для пользователя
@@ -359,6 +410,26 @@ components:
                 type: boolean
                 description: Флаг активности баннера
 
+    UserRequestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - login
+              - password
+            properties:
+              login:
+                nullable: false
+                type: string
+                description: Логин пользователя
+              password:
+                nullable: false
+                type: string
+                description: Пароль пользователя
+
+
   schemas:
     PostBannerResponse:
       type: object
@@ -366,6 +437,15 @@ components:
         banner_id:
           type: integer
           description: Идентификатор созданного баннера
+
+    PostAuthLoginResponse:
+      description: Токен пользователя
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
 
     ErrorResponse:
       type: object

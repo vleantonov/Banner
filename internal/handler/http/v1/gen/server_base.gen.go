@@ -13,6 +13,12 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Авторизация пользователя и получение токена
+	// (POST /auth/login)
+	PostAuthLogin(c *gin.Context)
+	// Регистрация пользователя
+	// (POST /auth/register)
+	PostAuthRegister(c *gin.Context)
 	// Удаление баннеров по тегу или фиче
 	// (DELETE /banner)
 	DeleteBanner(c *gin.Context, params DeleteBannerParams)
@@ -41,6 +47,32 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// PostAuthLogin operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthLogin(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostAuthLogin(c)
+}
+
+// PostAuthRegister operation middleware
+func (siw *ServerInterfaceWrapper) PostAuthRegister(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostAuthRegister(c)
+}
 
 // DeleteBanner operation middleware
 func (siw *ServerInterfaceWrapper) DeleteBanner(c *gin.Context) {
@@ -407,6 +439,8 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
+	router.POST(options.BaseURL+"/auth/login", wrapper.PostAuthLogin)
+	router.POST(options.BaseURL+"/auth/register", wrapper.PostAuthRegister)
 	router.DELETE(options.BaseURL+"/banner", wrapper.DeleteBanner)
 	router.GET(options.BaseURL+"/banner", wrapper.GetBanner)
 	router.POST(options.BaseURL+"/banner", wrapper.PostBanner)

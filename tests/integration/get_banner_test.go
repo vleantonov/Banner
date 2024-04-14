@@ -112,7 +112,7 @@ func TestGetBanner_SuccessCheckLen(t *testing.T) {
 		}
 
 		req.URL.RawQuery = q.Encode()
-		req.Header.Set("token", st.Cfg.ServerCfg.AdminToken)
+		req.Header.Set("token", st.AdminToken)
 
 		resp, err := st.HttpClient.Do(req)
 		if err != nil {
